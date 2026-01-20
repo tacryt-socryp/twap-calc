@@ -46,7 +46,6 @@ struct Args {
 struct PricePoint {
     timestamp: u64,
     price: f64,
-    block_number: u64,
 }
 
 #[tokio::main]
@@ -139,13 +138,13 @@ async fn main() -> Result<()> {
             price_points.push(PricePoint {
                 timestamp,
                 price,
-                block_number: target_block.as_u64(),
             });
 
             // Calculate time weight for TWAP
             if i > 0 {
-                let time_diff = timestamp - price_points[i - 1].timestamp;
-                let weighted_price = price_points[i - 1].price * time_diff as f64;
+                let prev_idx = (i - 1) as usize;
+                let time_diff = timestamp - price_points[prev_idx].timestamp;
+                let weighted_price = price_points[prev_idx].price * time_diff as f64;
                 total_weighted_price += weighted_price;
                 total_time += time_diff;
             }
