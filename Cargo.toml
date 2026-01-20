@@ -1,0 +1,17 @@
+[package]
+name = "aerodrome-twap"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "twap"
+path = "src/main.rs"
+
+[dependencies]
+ethers = { version = "2.0", features = ["abigen", "ws"] }
+tokio = { version = "1.35", features = ["full"] }
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = "0.4"
+clap = { version = "4.4", features = ["derive"] }
