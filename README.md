@@ -42,7 +42,8 @@ cargo run --release -- \
   --pool 0xYourPoolAddress \
   --rpc https://mainnet.base.org \
   --days 7 \
-  --samples 168
+  --samples 168 \
+  --end-date 2024-01-15
 ```
 
 ### Parameters
@@ -51,6 +52,7 @@ cargo run --release -- \
 - `--rpc, -r`: Base RPC URL (default: `https://mainnet.base.org`)
 - `--days, -d`: Number of days for TWAP calculation (default: 7)
 - `--samples, -s`: Number of sample points (default: 168, i.e., hourly samples for a week)
+- `--end-date, -e`: End date for TWAP range in YYYY-MM-DD format (midnight US Central Time). If not specified, uses current time
 
 ### Examples
 
@@ -72,7 +74,18 @@ cargo run --release -- --pool 0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d --days 
 cargo run --release -- --pool 0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d --days 7 --samples 672
 ```
 
-#### 4. Using custom RPC endpoint:
+#### 4. Calculate historical TWAP ending at a specific date:
+
+```bash
+cargo run --release -- \
+  --pool 0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d \
+  --days 7 \
+  --end-date 2024-01-15
+```
+
+This calculates the 7-day TWAP ending at midnight US Central Time on January 15, 2024.
+
+#### 5. Using custom RPC endpoint:
 
 ```bash
 cargo run --release -- \
@@ -111,9 +124,12 @@ The tool provides comprehensive statistics:
 
 1. **Connection**: Connects to Base network via RPC
 2. **Pool Analysis**: Retrieves token addresses and decimals from the pool contract
-3. **Historical Sampling**: Queries pool reserves at regular block intervals over the specified period
-4. **Price Calculation**: Calculates spot price at each sample point (reserve1/reserve0)
-5. **TWAP Computation**: Applies time-weighting to calculate the true time-weighted average price
+3. **Time Range Setup**:
+   - If `--end-date` is provided, uses binary search to find the block at that timestamp (midnight US Central Time)
+   - Otherwise, uses the current block as the end point
+4. **Historical Sampling**: Queries pool reserves at regular block intervals over the specified period
+5. **Price Calculation**: Calculates spot price at each sample point (reserve1/reserve0)
+6. **TWAP Computation**: Applies time-weighting to calculate the true time-weighted average price
 
 ## Finding Pool Addresses
 

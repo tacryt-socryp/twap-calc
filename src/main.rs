@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use chrono::{NaiveDate, TimeZone};
+use chrono_tz::US::Central;
 use clap::Parser;
 use ethers::prelude::*;
 use std::sync::Arc;
@@ -40,12 +42,57 @@ struct Args {
     /// Number of sample points (defaults to 168 = hourly for a week)
     #[arg(short, long, default_value = "168")]
     samples: u64,
+
+    /// End date for TWAP range in YYYY-MM-DD format (midnight US Central Time). If not specified, uses current time.
+    #[arg(short, long)]
+    end_date: Option<String>,
 }
 
 #[derive(Debug)]
 struct PricePoint {
     timestamp: u64,
     price: f64,
+}
+
+/// Find the block number closest to a given timestamp using binary search
+async fn find_block_at_timestamp(
+    provider: Arc<Provider<Http>>,
+    target_timestamp: u64,
+) -> Result<U64> {
+    let latest_block = provider.get_block_number().await?;
+
+    // Get latest block timestamp to check if target is in the future
+    let latest = provider.get_block(latest_block).await?.context("Latest block not found")?;
+    let latest_timestamp = latest.timestamp.as_u64();
+
+    if target_timestamp >= latest_timestamp {
+        return Ok(latest_block);
+    }
+
+    // Binary search for the block
+    let mut low = 1u64;
+    let mut high = latest_block.as_u64();
+    let mut best_block = latest_block.as_u64();
+
+    println!("🔍 Finding block at timestamp {}...", target_timestamp);
+
+    while low <= high {
+        let mid = (low + high) / 2;
+
+        let block = provider.get_block(U64::from(mid)).await?
+            .context(format!("Block {} not found", mid))?;
+        let block_timestamp = block.timestamp.as_u64();
+
+        if block_timestamp <= target_timestamp {
+            best_block = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    println!("✓ Found block {} for timestamp {}", best_block, target_timestamp);
+    Ok(U64::from(best_block))
 }
 
 #[tokio::main]
@@ -83,11 +130,25 @@ async fn main() -> Result<()> {
     println!("📌 Token1: {} ({})", token1_symbol, token1_addr);
     println!();
 
-    // Get current block
-    let current_block = provider
-        .get_block_number()
-        .await
-        .context("Failed to get current block")?;
+    // Determine the end block (either from end_date or current block)
+    let end_block = if let Some(date_str) = &args.end_date {
+        // Parse the date as midnight US Central Time
+        let naive_date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+            .context(format!("Invalid date format '{}'. Expected YYYY-MM-DD", date_str))?;
+
+        let datetime = Central.from_local_datetime(
+            &naive_date.and_hms_opt(0, 0, 0).context("Invalid time")?
+        ).single().context("Ambiguous datetime")?;
+
+        let timestamp = datetime.timestamp() as u64;
+
+        println!("📅 End date: {} (midnight US Central = timestamp {})", date_str, timestamp);
+
+        // Find the block at this timestamp
+        find_block_at_timestamp(provider.clone(), timestamp).await?
+    } else {
+        provider.get_block_number().await.context("Failed to get current block")?
+    };
 
     // Calculate time period
     let seconds_per_day = 86400u64;
@@ -106,10 +167,10 @@ async fn main() -> Result<()> {
 
     for i in 0..args.samples {
         let blocks_back = (args.samples - i) * blocks_per_interval;
-        let target_block = if blocks_back > current_block.as_u64() {
+        let target_block = if blocks_back > end_block.as_u64() {
             U64::from(1) // Genesis block if we go too far back
         } else {
-            current_block - blocks_back
+            end_block - blocks_back
         };
 
         // Get block timestamp
